@@ -330,6 +330,7 @@ public class VIP
 public class WeaponsRestrict
 {
     [JsonPropertyName("Global Restrict")] public bool Global { get; set; } = true;
+    //[JsonPropertyName("Remove Selected Weapons On VIP Expire")] public List<string> RemoveWeaponsOnVipLoss { get; set; } = new();
 
     [JsonPropertyName("Weapons")]
     public Dictionary<string, Dictionary<string, Dictionary<RestrictType, RestrictData>>> Restrictions { get; set; } = new()
