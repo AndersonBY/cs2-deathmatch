@@ -7,7 +7,7 @@ Designed for <a href="https://github.com/roflmuffin/CounterStrikeSharp">CounterS
 ### Main features
 - [x] Weapon Selection
 - [x] Creating Custom Modes
-  - [x] With Examples
+  - [x] [With Examples](https://github.com/NockyCZ/CS2-Deathmatch/tree/main/Custom%20Modes%20Examples)
 - [x] Weapons Restrict
 - [x] Spawns Editor
 - [x] Configuration
