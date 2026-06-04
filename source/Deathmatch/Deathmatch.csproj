@@ -1,18 +1,43 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PublishDir>./bin/Deathmatch/</PublishDir>
+  </PropertyGroup>
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.342" />
-    <PackageReference Include="MysqlConnector" Version="2.3.7" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <ProjectReference Include="..\DeathmatchAPI\DeathmatchAPI.csproj" />
-    <Compile Remove="RayTrace\**\*.cs" />
+    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.369">
+      <PrivateAssets>none</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+      <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="MysqlConnector" Version="2.5.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.5-beta1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <ProjectReference Include="..\DeathmatchAPI\DeathmatchAPI.csproj">
+      <Private>false</Private>
+    </ProjectReference>
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\Lang\**\*.*" Link="lang\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Spawns Locations\**\*.*" Link="spawns\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="PublishSharedApi" AfterTargets="Publish">
+    <MSBuild Projects="..\DeathmatchAPI\DeathmatchAPI.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);PublishDir=$(MSBuildProjectDirectory)/bin/_shared/DeathmatchAPI/" />
+  </Target>
 
 </Project>

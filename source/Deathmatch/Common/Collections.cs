@@ -12,8 +12,8 @@ namespace Deathmatch
         public static List<SpawnData> spawnPoints = new();
         public static Dictionary<int, Vector> blockedSpawns = new();
         public static Dictionary<int, DeathmatchPlayerData> playerData = new();
-        public Dictionary<CCSPlayerController, (float timer, float currentTime)> playersWaitingForRespawn = new();
-        public Dictionary<CCSPlayerController, (float timer, float currentTime)> playersWithSpawnProtection = new();
+        public Dictionary<int, (float timer, float currentTime)> playersWaitingForRespawn = new();
+        public Dictionary<int, (float timer, float currentTime)> playersWithSpawnProtection = new();
         public static HashSet<CBaseEntity> savedSpawnsModel = new();
 
         readonly Dictionary<string, string> weaponSelectMapping = new()

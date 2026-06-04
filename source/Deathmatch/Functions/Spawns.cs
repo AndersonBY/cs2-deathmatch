@@ -189,7 +189,7 @@ namespace Deathmatch
 
                 //model.SetModel("characters/models/shared/animsets/animset_uiplayer.vmdl");
                 //model.SetModel("characters/models/ctm_fbi/ctm_fbi_variantf.vmdl");
-                model.SetModel(spawn.Team == CsTeam.CounterTerrorist ? "characters/models/ctm_sas/ctm_sas.vmdl" : "characters/models/tm_leet/tm_leet_variantb.vmdl");
+                model.SetModel(spawn.Team == CsTeam.CounterTerrorist ? "agents/models/ctm_sas/ctm_sas.vmdl" : "agents/models/tm_leet/tm_leet_variantb.vmdl");
                 //
                 model.UseAnimGraph = false;
                 model.AcceptInput("SetAnimation", value: "tools_preview");
@@ -214,6 +214,7 @@ namespace Deathmatch
                 textVector.JustifyHorizontal = PointWorldTextJustifyHorizontal_t.POINT_WORLD_TEXT_JUSTIFY_HORIZONTAL_CENTER;
                 textVector.JustifyVertical = PointWorldTextJustifyVertical_t.POINT_WORLD_TEXT_JUSTIFY_VERTICAL_CENTER;
                 textVector.ReorientMode = PointWorldTextReorientMode_t.POINT_WORLD_TEXT_REORIENT_NONE;
+                textVector.DispatchSpawn();
 
                 var textPos = new Vector(spawn.Position.X, spawn.Position.Y, spawn.Position.Z);
                 var textAngle = new QAngle(spawn.Angle.X, spawn.Angle.Y, spawn.Angle.Z);
@@ -221,7 +222,6 @@ namespace Deathmatch
                 textAngle.Z += 90f;
                 textAngle.Y += 90f;
                 textVector.Teleport(textPos, textAngle);
-                textVector.DispatchSpawn();
                 savedSpawnsModel.Add(textVector);
             }
         }

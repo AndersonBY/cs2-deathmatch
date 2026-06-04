@@ -167,6 +167,7 @@ public class Gameplay
     [JsonPropertyName("Map Start Custom Mode")] public int MapStartMode { get; set; } = 0;
     [JsonPropertyName("New Mode Countdown")] public int NewModeCountdown { get; set; } = 10;
     [JsonPropertyName("Hud Type")] public int HudType { get; set; } = 1;
+    [JsonPropertyName("Mode Message Duration")] public int ModeMessageDuration { get; set; } = 10;
     [JsonPropertyName("Default Weapons")] public int DefaultModeWeapons { get; set; } = 2;
     [JsonPropertyName("Switch Weapons")] public bool SwitchWeapons { get; set; } = true;
     [JsonPropertyName("Allow Buymenu")] public bool AllowBuyMenu { get; set; } = true;

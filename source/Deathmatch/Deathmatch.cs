@@ -9,6 +9,7 @@ using CounterStrikeSharp.API.Core.Capabilities;
 using DeathmatchAPI.Helpers;
 using static DeathmatchAPI.Events.IDeathmatchEventsAPI;
 using static CounterStrikeSharp.API.Core.Listeners;
+using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Utils;
 using System.Drawing;
 using System.Data;
@@ -19,8 +20,8 @@ namespace Deathmatch;
 public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
 {
     public override string ModuleName => "Deathmatch Core";
-    public override string ModuleAuthor => "Nocky";
-    public override string ModuleVersion => "1.2.9";
+    public override string ModuleAuthor => "Nocky & Miksen(Forked)";
+    public override string ModuleVersion => "1.3.3";
 
     public void OnConfigParsed(DeathmatchConfig config)
     {
@@ -33,7 +34,8 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
         var API = new Deathmatch();
         Capabilities.RegisterPluginCapability(DeathmatchAPI, () => API);
         VirtualFunctions.CCSPlayer_ItemServices_CanAcquireFunc.Hook(OnWeaponCanAcquire, HookMode.Pre);
-        VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Hook(OnTakeDamage, HookMode.Pre);
+        //VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Hook(OnTakeDamage, HookMode.Pre);
+        RegisterListener<OnEntityTakeDamagePre>(OnEntityTakeDamagePre);
 
         if (Config.SaveWeapons)
             _ = CreateDatabaseConnection();
@@ -47,15 +49,16 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
         foreach (var cmd in DeathmatchMenus)
             AddCustomCommands(cmd, "", 3);
         foreach (string radioName in RadioMessagesList)
-            AddCommandListener(radioName, OnPlayerRadioMessage);
+            RegisterTrackedCommandListener(radioName, OnPlayerRadioMessage);
 
-        AddCommandListener("playerchatwheel", OnPlayerChatwheel);
-        AddCommandListener("player_ping", OnPlayerPing);
-        AddCommandListener("autobuy", OnRandomWeapons);
+        RegisterTrackedCommandListener("playerchatwheel", OnPlayerChatwheel);
+        RegisterTrackedCommandListener("player_ping", OnPlayerPing);
+        RegisterTrackedCommandListener("autobuy", OnRandomWeapons);
 
         bool mapLoaded = false;
-        RegisterListener<OnMapEnd>(() => { mapLoaded = false; });
-        RegisterListener<OnMapStart>(mapName =>
+        _onMapEndDelegate = () => { mapLoaded = false; };
+        RegisterListener<OnMapEnd>(_onMapEndDelegate);
+        _onMapStartDelegate = mapName =>
         {
             blockedSpawns.Clear();
             savedSpawnsModel.Clear();
@@ -87,42 +90,48 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
                 double lastUpdate = Server.CurrentTime;
                 AddTimer(0.1f, () =>
                 {
-                    if (playersWaitingForRespawn.Any())
+                    if (playersWaitingForRespawn.Count > 0)
                     {
-                        foreach (var data in playersWaitingForRespawn)
+                        List<int>? toRemove = null;
+                        foreach (var kv in playersWaitingForRespawn)
                         {
-                            var time = Server.CurrentTime - data.Value.currentTime;
-                            if (time >= data.Value.timer)
+                            var time = Server.CurrentTime - kv.Value.currentTime;
+                            if (time < kv.Value.timer)
+                                continue;
+
+                            var player = Utilities.GetPlayerFromSlot(kv.Key);
+                            if (player != null && player.IsValid && !player.PawnIsAlive && (player.Team == CsTeam.Terrorist || player.Team == CsTeam.CounterTerrorist))
                             {
-                                var player = data.Key;
-                                if (player != null && player.IsValid && !player.PawnIsAlive && (player.Team == CsTeam.Terrorist || player.Team == CsTeam.CounterTerrorist))
-                                {
-                                    player.Respawn();
-                                    playersWaitingForRespawn.Remove(player);
-                                }
+                                player.Respawn();
                             }
+                            (toRemove ??= new List<int>()).Add(kv.Key);
                         }
+                        if (toRemove != null)
+                            foreach (var slot in toRemove) playersWaitingForRespawn.Remove(slot);
                     }
-                    if (playersWithSpawnProtection.Any())
+                    if (playersWithSpawnProtection.Count > 0)
                     {
-                        foreach (var data in playersWithSpawnProtection)
+                        List<int>? toRemove = null;
+                        foreach (var kv in playersWithSpawnProtection)
                         {
-                            var time = Server.CurrentTime - data.Value.currentTime;
-                            if (time >= data.Value.timer)
+                            var time = Server.CurrentTime - kv.Value.currentTime;
+                            if (time < kv.Value.timer)
+                                continue;
+
+                            var player = Utilities.GetPlayerFromSlot(kv.Key);
+                            if (player != null && player.IsValid && player.PlayerPawn.Value != null && playerData.TryGetValue(player.Slot, out var pData))
                             {
-                                var player = data.Key;
-                                if (player != null && player.IsValid && player.PlayerPawn.Value != null && playerData.TryGetValue(player.Slot, out var pData))
+                                pData.SpawnProtection = false;
+                                if (!string.IsNullOrEmpty(Config.Gameplay.SpawnProtectionColor))
                                 {
-                                    pData.SpawnProtection = false;
-                                    playersWithSpawnProtection.Remove(data.Key);
-                                    if (!string.IsNullOrEmpty(Config.Gameplay.SpawnProtectionColor))
-                                    {
-                                        player.PlayerPawn.Value.Render = Color.White;
-                                        Utilities.SetStateChanged(player, "CBaseModelEntity", "m_clrRender");
-                                    }
+                                    player.PlayerPawn.Value.Render = Color.White;
+                                    Utilities.SetStateChanged(player, "CBaseModelEntity", "m_clrRender");
                                 }
                             }
+                            (toRemove ??= new List<int>()).Add(kv.Key);
                         }
+                        if (toRemove != null)
+                            foreach (var slot in toRemove) playersWithSpawnProtection.Remove(slot);
                     }
 
                     if (Config.Gameplay.IsCustomModes)
@@ -158,7 +167,7 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
                                                 p.PrintToCenter($"{Localizer["Hud.NewModeStarting", RemainingTime, NextModeData.Name]}");
                                         }
                                     }
-                                    else if (!string.IsNullOrEmpty(ActiveMode.CenterMessageText))
+                                    else if (!string.IsNullOrEmpty(ActiveMode.CenterMessageText) && Server.CurrentTime < ModeMessageHideTime)
                                     {
                                         if (Config.Gameplay.HudType == 0)
                                             p.PrintToCenter(ModeCenterMessage);
@@ -200,61 +209,30 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
                                     ModeCenterMessage = ModeCenterMessage.Replace("{NEXTMODE}", modeData.Name);
                                 }
                             }
+                            // Rebuild HUD string cache once per second to keep OnTick alloc-free
+                            RebuildHudCache();
                         }
                     }
                 }, TimerFlags.REPEAT | TimerFlags.STOP_ON_MAPCHANGE);
             }
-        });
-        RegisterListener<OnTick>(() =>
-        {
-            if (VisibleHud)
-            {
-                foreach (var p in Utilities.GetPlayers())
-                {
-                    if (!playerData.TryGetValue(p.Slot, out var data))
-                        continue;
-
-                    if ((Config.PlayersPreferences.HudMessages.Enabled && !GetPrefsValue(data, "HudMessages", Config.PlayersPreferences.HudMessages.DefaultValue)) || MenuManager.GetActiveMenu(p) != null)
-                        continue;
-
-                    if (RemainingTime <= Config.Gameplay.NewModeCountdown && Config.Gameplay.NewModeCountdown > 0)
-                    {
-                        if (RemainingTime == 0)
-                        {
-                            if (Config.Gameplay.HudType == 1)
-                                p.PrintToCenterHtml($"{Localizer["Hud.NewModeStarted"]}");
-                            //else
-                            //    p.PrintToCenter($"{Localizer["Hud.NewModeStarted"]}");
-                        }
-                        else if (!Config.General.HideModeRemainingTime && Config.CustomModes.TryGetValue(NextMode.ToString(), out var NextModeData))
-                        {
-                            if (Config.Gameplay.HudType == 0)
-                                p.PrintToCenterHtml($"{Localizer["Hud.NewModeStarting", RemainingTime, NextModeData.Name]}");
-                        }
-                    }
-                    else if (!string.IsNullOrEmpty(ActiveMode.CenterMessageText))
-                    {
-                        if (Config.Gameplay.HudType == 1)
-                            p.PrintToCenterHtml(ModeCenterMessage);
-                        //else
-                        //    p.PrintToCenter(ModeCenterMessage);
-                    }
-                }
-            }
-        });
+        };
+        RegisterListener<OnMapStart>(_onMapStartDelegate);
+        _onTickDelegate = OnTickHudFast;
+        RegisterListener<OnTick>(_onTickDelegate);
 
         if (Config.General.RemoveDecals)
         {
-            HookUserMessage(411, um =>
+            _hookDecals = um =>
             {
                 um.Recipients.Clear();
                 return HookResult.Continue;
-            }, HookMode.Pre);
+            };
+            HookUserMessage(411, _hookDecals, HookMode.Pre);
         }
 
         if (Config.General.RemovePointsMessage)
         {
-            HookUserMessage(124, um =>
+            _hookPoints = um =>
             {
                 if (IsCasualGamemode)
                     return HookResult.Continue;
@@ -271,12 +249,13 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
                     }
                 }
                 return HookResult.Continue;
-            }, HookMode.Pre);
+            };
+            HookUserMessage(124, _hookPoints, HookMode.Pre);
         }
 
         if (Config.General.RemoveRespawnSound)
         {
-            HookUserMessage(208, um =>
+            _hookRespawnSound = um =>
             {
                 if (IsCasualGamemode)
                     return HookResult.Continue;
@@ -286,10 +265,11 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
                     um.Recipients.Clear();
 
                 return HookResult.Continue;
-            }, HookMode.Pre);
+            };
+            HookUserMessage(208, _hookRespawnSound, HookMode.Pre);
         }
 
-        HookUserMessage(323, um =>
+        _hookHudMessages = um =>
         {
             if (IsCasualGamemode)
                 return HookResult.Continue;
@@ -300,7 +280,8 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
                 return HookResult.Stop;
 
             return HookResult.Continue;
-        }, HookMode.Pre);
+        };
+        HookUserMessage(323, _hookHudMessages, HookMode.Pre);
 
         if (hotReload)
         {
@@ -321,7 +302,116 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
     public override void Unload(bool hotReload)
     {
         VirtualFunctions.CCSPlayer_ItemServices_CanAcquireFunc.Unhook(OnWeaponCanAcquire, HookMode.Pre);
-        VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Unhook(OnTakeDamage, HookMode.Pre);
+        //VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Unhook(OnTakeDamage, HookMode.Pre);
+        RemoveListener<OnEntityTakeDamagePre>(OnEntityTakeDamagePre);
+
+        // Remove engine listeners — without this they accumulate every hotreload
+        if (_onMapStartDelegate != null) { RemoveListener<OnMapStart>(_onMapStartDelegate); _onMapStartDelegate = null; }
+        if (_onMapEndDelegate   != null) { RemoveListener<OnMapEnd>(_onMapEndDelegate);     _onMapEndDelegate   = null; }
+        if (_onTickDelegate     != null) { RemoveListener<OnTick>(_onTickDelegate);         _onTickDelegate     = null; }
+
+        // Unhook user messages — same accumulation problem
+        if (_hookDecals       != null) { UnhookUserMessage(411, _hookDecals,       HookMode.Pre); _hookDecals       = null; }
+        if (_hookPoints       != null) { UnhookUserMessage(124, _hookPoints,       HookMode.Pre); _hookPoints       = null; }
+        if (_hookRespawnSound != null) { UnhookUserMessage(208, _hookRespawnSound, HookMode.Pre); _hookRespawnSound = null; }
+        if (_hookHudMessages  != null) { UnhookUserMessage(323, _hookHudMessages,  HookMode.Pre); _hookHudMessages  = null; }
+
+        // Remove tracked command listeners
+        foreach (var (cmd, cb) in _registeredCommandListeners)
+            RemoveCommandListener(cmd, cb, HookMode.Pre);
+        _registeredCommandListeners.Clear();
+
+        // Drop references so native CHandle wrappers + lambdas captured by closures can be GC'd
+        playersWaitingForRespawn.Clear();
+        playersWithSpawnProtection.Clear();
+        playerData.Clear();
+        blockedSpawns.Clear();
+        savedSpawnsModel.Clear();
+        spawnPoints.Clear();
+
+        HudCenterHtml = "";
+        HudCenterMsg = "";
+        HudHasContent = false;
+        _hudPlayerCache.Clear();
+
+        // Clear DeathmatchAPI static caches — they're held across plugin reloads otherwise,
+        // retaining captured closures (Action<CCSPlayerController, Menu>) and stale Preference instances.
+        Preferences.Categorie.RemoveAllCategories();
+        Preferences.Menu.RemoveAllOptions();
+        Preferences.Preference.RemoveAllPreferences();
+    }
+
+    // Tracks AddCommandListener invocations so Unload can match-and-remove
+    private void RegisterTrackedCommandListener(string command, CommandInfo.CommandListenerCallback callback)
+    {
+        AddCommandListener(command, callback);
+        _registeredCommandListeners.Add((command, callback));
+    }
+
+    // Rebuilt at most ~1×/sec from the REPEAT timer's 1-second branch.
+    // OnTickHudFast reads these without allocating to keep the per-tick path cheap.
+    private void RebuildHudCache()
+    {
+        HudHasContent = false;
+        HudCenterHtml = "";
+        HudCenterMsg = "";
+
+        if (RemainingTime <= Config.Gameplay.NewModeCountdown && Config.Gameplay.NewModeCountdown > 0)
+        {
+            if (RemainingTime == 0)
+            {
+                string s = Localizer["Hud.NewModeStarted"];
+                HudCenterHtml = s;
+                HudCenterMsg = s;
+                HudHasContent = true;
+            }
+            else if (!Config.General.HideModeRemainingTime && Config.CustomModes.TryGetValue(NextMode.ToString(), out var nextModeData))
+            {
+                string s = Localizer["Hud.NewModeStarting", RemainingTime, nextModeData.Name];
+                HudCenterHtml = s;
+                HudCenterMsg = s;
+                HudHasContent = true;
+            }
+        }
+        else if (!string.IsNullOrEmpty(ActiveMode.CenterMessageText) && Server.CurrentTime < ModeMessageHideTime)
+        {
+            HudCenterHtml = ModeCenterMessage;
+            HudCenterMsg = ModeCenterMessage;
+            HudHasContent = true;
+        }
+
+        // Refresh cached player list at the same 1Hz cadence; avoids Utilities.GetPlayers() alloc per tick
+        float now = Server.CurrentTime;
+        if (now - _lastHudPlayerCacheTime >= 1.0f)
+        {
+            _hudPlayerCache.Clear();
+            foreach (var p in Utilities.GetPlayers())
+                _hudPlayerCache.Add(p);
+            _lastHudPlayerCacheTime = now;
+        }
+    }
+
+    private void OnTickHudFast()
+    {
+        if (!VisibleHud || !HudHasContent || _hudPlayerCache.Count == 0)
+            return;
+
+        // Iterate cached player list to avoid per-tick allocation from Utilities.GetPlayers()
+        for (int i = 0; i < _hudPlayerCache.Count; i++)
+        {
+            var p = _hudPlayerCache[i];
+            if (p == null || !p.IsValid)
+                continue;
+
+            if (!playerData.TryGetValue(p.Slot, out var data))
+                continue;
+
+            if ((Config.PlayersPreferences.HudMessages.Enabled && !GetPrefsValue(data, "HudMessages", Config.PlayersPreferences.HudMessages.DefaultValue)) || MenuManager.GetActiveMenu(p) != null)
+                continue;
+
+            if (Config.Gameplay.HudType == 1)
+                p.PrintToCenterHtml(HudCenterHtml);
+        }
     }
 
     public void SetupCustomMode(string modeId)
@@ -339,6 +429,7 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
             ModeCenterMessage = ActiveMode.CenterMessageText.Replace("{NEXTMODE}", modeData.Name);
             ModeCenterMessage = ModeCenterMessage.Replace("{REMAININGTIME}", RemainingTime.ToString());
         }
+        ModeMessageHideTime = Config.Gameplay.ModeMessageDuration > 0 ? Server.CurrentTime + Config.Gameplay.ModeMessageDuration : float.MaxValue;
         SetupDeathmatchConfiguration(ActiveMode, bNewmode);
 
         Server.NextFrame(() =>

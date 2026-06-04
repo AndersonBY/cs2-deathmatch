@@ -189,7 +189,7 @@ namespace Deathmatch
                             Utilities.SetStateChanged(player, "CBaseModelEntity", "m_clrRender");
                         }
                         data.SpawnProtection = true;
-                        playersWithSpawnProtection[player] = (timer, Server.CurrentTime);
+                        playersWithSpawnProtection[player.Slot] = (timer, Server.CurrentTime);
                     }
 
                     if (!IsCasualGamemode)
