@@ -14,6 +14,9 @@ using CounterStrikeSharp.API.Modules.Utils;
 using System.Drawing;
 using System.Data;
 using DeathmatchAPI;
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Deathmatch;
 
@@ -21,13 +24,126 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
 {
     public override string ModuleName => "Deathmatch Core";
     public override string ModuleAuthor => "Nocky & Miksen(Forked)";
-    public override string ModuleVersion => "1.3.3";
+    public override string ModuleVersion => "1.3.4";
 
     public void OnConfigParsed(DeathmatchConfig config)
     {
         Config = config;
         CheckedEnemiesDistance = Config.SpawnSystem.DistanceRespawn;
         CheckSpawnVisibility = Config.SpawnSystem.CheckVisible;
+
+        UpdateConfigFile();
+    }
+
+    private static readonly JsonSerializerOptions _configEmitOptions = new() { WriteIndented = false };
+    private static readonly JsonSerializerOptions _configWriteOptions = new() { WriteIndented = true };
+
+    // Restores any key defined in Configs.cs that is missing from the on-disk Deathmatch.json
+    // (CSS only reads the file, it never writes new/missing keys back). Compares the user's file
+    // against a fresh default config and adds back anything missing at any depth — including
+    // default dictionary entries (modes, weapon restricts) the user removed. Existing user values
+    // and key order are preserved; only missing keys are added. JSON comments are dropped.
+    private void UpdateConfigFile()
+    {
+        try
+        {
+            // ModuleDirectory is somewhere under .../counterstrikesharp/plugins/<name>[/...].
+            // Split on the "/plugins/" segment so nesting depth doesn't matter.
+            string moduleDir = ModuleDirectory.Replace('\\', '/').TrimEnd('/');
+            const string marker = "/plugins/";
+            int idx = moduleDir.IndexOf(marker, StringComparison.Ordinal);
+            if (idx < 0)
+            {
+                Logger.LogError($"Config auto-update: '/plugins/' not in ModuleDirectory={moduleDir} — skipped.");
+                return;
+            }
+
+            string cssRoot = moduleDir.Substring(0, idx);            // .../counterstrikesharp
+            string pluginName = new DirectoryInfo(ModuleDirectory).Name; // leaf folder (ignores disabled/ etc.)
+            string configPath = Path.Combine(cssRoot, "configs", "plugins", pluginName, pluginName + ".json");
+
+            if (!File.Exists(configPath))
+            {
+                Logger.LogError($"Config auto-update: file not found at {configPath} — skipped.");
+                return;
+            }
+
+            JsonNode? root;
+            try
+            {
+                root = JsonNode.Parse(File.ReadAllText(configPath), null, new JsonDocumentOptions
+                {
+                    AllowTrailingCommas = true,
+                    CommentHandling = JsonCommentHandling.Skip
+                });
+            }
+            catch (JsonException ex)
+            {
+                Logger.LogError($"Deathmatch.json is not valid JSON, skipping auto-update: {ex.Message}");
+                return;
+            }
+
+            if (root is not JsonObject existing)
+                return;
+
+            // Full schema with every default from Configs.cs.
+            if (JsonNode.Parse(JsonSerializer.Serialize(new DeathmatchConfig(), _configEmitOptions)) is not JsonObject defaults)
+                return;
+
+            JsonObject merged = MergeOrdered(existing, defaults, out bool changed);
+            if (changed)
+            {
+                File.WriteAllText(configPath, merged.ToJsonString(_configWriteOptions));
+                Logger.LogInformation("Deathmatch config: restored missing keys (existing values preserved).");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"Failed to auto-update config file: {ex.Message}");
+        }
+    }
+
+    // Rebuilds a new object ordered exactly like 'defaults' (= Configs.cs declaration order),
+    // so a restored key lands in its proper position instead of at the end. Existing user
+    // values are kept (only missing keys take the default); keys the user has that are not in
+    // defaults are appended afterwards. Arrays are treated as a single value. 'changed' is set
+    // if any key was missing at any depth.
+    private static JsonObject MergeOrdered(JsonObject target, JsonObject defaults, out bool changed)
+    {
+        changed = false;
+        var result = new JsonObject();
+
+        foreach (var kv in defaults)
+        {
+            if (target[kv.Key] is JsonNode existingNode)
+            {
+                if (existingNode is JsonObject existingObj && kv.Value is JsonObject defaultObj)
+                {
+                    result[kv.Key] = MergeOrdered(existingObj, defaultObj, out bool childChanged);
+                    if (childChanged) changed = true;
+                }
+                else
+                {
+                    target.Remove(kv.Key);          // detach before re-parenting
+                    result[kv.Key] = existingNode;  // keep user's value as-is
+                }
+            }
+            else
+            {
+                result[kv.Key] = kv.Value?.DeepClone();
+                changed = true;
+            }
+        }
+
+        // Preserve any keys the user added that are not part of the schema.
+        foreach (var kv in target.ToList())
+        {
+            if (result.ContainsKey(kv.Key)) continue;
+            target.Remove(kv.Key);
+            result[kv.Key] = kv.Value;
+        }
+
+        return result;
     }
     public override void Load(bool hotReload)
     {
