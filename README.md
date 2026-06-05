@@ -61,6 +61,7 @@ Designed for <a href="https://github.com/roflmuffin/CounterStrikeSharp">CounterS
     "Map Start Custom Mode": 0,
     "New Mode Countdown": 10,
     "Hud Type": 1,
+    "Mode Message Duration": 10,
     "Default Weapons": 2,
     "Switch Weapons": true,
     "Allow Buymenu": true,
