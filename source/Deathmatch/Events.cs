@@ -322,20 +322,10 @@ namespace Deathmatch
 		private HookResult OnEntityTakeDamagePre(CBaseEntity entity, CTakeDamageInfo info)
 		{
 			// 1. Verify the entity receiving damage is a player pawn
-			if (entity == null || entity.DesignerName != "cs_player_pawn")
+			if (entity == null || !entity.IsValid || entity.DesignerName != "cs_player_pawn")
 				return HookResult.Continue;
 
 			CCSPlayerPawn pawn = new CCSPlayerPawn(entity.Handle);
-
-			// 2. Get the Controller from the Pawn
-			// var player = pawn.Controller.Value;
-
-			// 3. Null and Validity checks
-			// if (player == null || !player.IsValid)
-			// 	return HookResult.Continue;
-
-			if (entity == null || !entity.IsValid || !entity.DesignerName.Equals("player"))
-				return HookResult.Continue;
 
 			if (pawn == null || !pawn.IsValid)
 				return HookResult.Continue;
