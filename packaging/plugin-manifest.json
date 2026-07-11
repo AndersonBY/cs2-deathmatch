@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "deathmatch",
+  "name": "Deathmatch",
+  "kind": "game_mode",
+  "version": "",
+  "build_revision": "",
+  "upstream_repo": "NockyCZ/CS2-Deathmatch",
+  "upstream_revision": "c8653fdda265742264a31f32e8fc1b128a3502c1",
+  "license": "NOASSERTION",
+  "compatibility": {"os": ["linux"], "arch": ["x86_64"], "dotnet_target": "net10.0", "counterstrikesharp_min": 369, "counterstrikesharp_max_tested": 371},
+  "required_paths": ["addons/counterstrikesharp/plugins/Deathmatch/Deathmatch.dll", "addons/counterstrikesharp/shared/DeathmatchAPI/DeathmatchAPI.dll"],
+  "dependencies": ["DeathmatchAPI"],
+  "restart_policy": "process",
+  "persistent_paths": ["addons/counterstrikesharp/plugins/Deathmatch/spawns", "addons/counterstrikesharp/configs/plugins/Deathmatch", "cfg/deathmatch"]
+}

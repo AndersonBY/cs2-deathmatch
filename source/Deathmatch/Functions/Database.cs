@@ -34,8 +34,9 @@ namespace Deathmatch
             }
         }
 
-        public async Task UpdateOrLoadPlayerData(CCSPlayerController player, string SteamID, string[]? data, bool load = true)
+        public async Task UpdateOrLoadPlayerData(CCSPlayerController player, ulong steamId, string[]? data, bool load = true)
         {
+            int expectedSlot = player.Slot;
             try
             {
                 using (var connection = GetConnection())
@@ -75,7 +76,7 @@ namespace Deathmatch
 
                     using (var cmd = new MySqlCommand(load ? sqlLoad : sqlUpdate, connection))
                     {
-                        cmd.Parameters.AddWithValue("@steamid", SteamID);
+                        cmd.Parameters.AddWithValue("@steamid", steamId.ToString());
                         if (load)
                         {
                             using (var reader = await cmd.ExecuteReaderAsync())
@@ -88,7 +89,10 @@ namespace Deathmatch
 
                                     Server.NextFrame(() =>
                                     {
-                                        if (playerData.TryGetValue(player.Slot, out var data))
+                                        if (!PlayerIdentity.Matches(expectedSlot, steamId, player))
+                                            return;
+
+                                        if (playerData.TryGetValue(expectedSlot, out var data))
                                         {
                                             bool IsVIP = AdminManager.PlayerHasPermissions(player, Config.PlayersSettings.VIPFlag);
                                             if (primaryWeapons == null || secondaryWeapons == null)

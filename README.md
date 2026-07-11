@@ -1,3 +1,7 @@
+> **MBSifu maintained fork.** This public fork tracks [NockyCZ/CS2-Deathmatch](https://github.com/NockyCZ/CS2-Deathmatch) and ships reviewed, reproducible Linux releases for MBSifu and the wider CS2 community. See [MAINTENANCE.md](MAINTENANCE.md) before proposing upstream sync or release changes.
+
+[![CI](https://github.com/AndersonBY/cs2-deathmatch/actions/workflows/ci.yml/badge.svg)](https://github.com/AndersonBY/cs2-deathmatch/actions/workflows/ci.yml)
+
 <p align="center">
 <b>Deathmatch + MutliCFG</b> plugin is a game mode where players respawn immediately after being killed, allowing them to practice shooting and movement without the typical match constraints. MutliCFG allows you to set up special modes that change the gameplay to different types such as Only Pistols, Only AWP, Rifles, etc.
 Use gamemodes like <b>Custom</b> , <b>Casual</b> or <b>Deathmatch</b> for the plugin to work properly.<br>
@@ -33,8 +37,8 @@ Designed for <a href="https://github.com/roflmuffin/CounterStrikeSharp">CounterS
 
 
 ### Installation
-1. Download the latest verison - https://github.com/NockyCZ/CS2-Deathmatch/releases
-2. Unzip into your servers `csgo/addons/counterstrikesharp/` dir
+1. Download the `linux-x64.zip` asset from https://github.com/AndersonBY/cs2-deathmatch/releases
+2. Extract it into the server's `game/csgo/` directory
 3. Restart the server
 4. Configure the config files and custom modes
 <h1></h1>

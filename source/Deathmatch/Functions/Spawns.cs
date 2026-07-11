@@ -50,8 +50,13 @@ namespace Deathmatch
         public KeyValuePair<Vector, QAngle>? GetAvailableSpawn(CCSPlayerController player, IEnumerable<KeyValuePair<Vector, QAngle>> spawnsList)
         {
             var playerPawns = Utilities.GetPlayers()
-                .Where(p => !p.IsHLTV && p.LifeState == (byte)LifeState_t.LIFE_ALIVE && p != player)
-                .Select(p => p.PlayerPawn.Value);
+                .Where(p => !p.IsHLTV
+                    && p.LifeState == (byte)LifeState_t.LIFE_ALIVE
+                    && p != player
+                    && (Config.Gameplay.IsFFA || p.Team != player.Team))
+                .Select(p => p.PlayerPawn.Value)
+                .Where(pawn => pawn != null && pawn.IsValid)
+                .ToList();
 
             var shuffledSpawns = spawnsList.ToList();
             for (int i = shuffledSpawns.Count - 1; i > 0; i--)
@@ -103,7 +108,7 @@ namespace Deathmatch
             }
 
             SendConsoleMessage($"[Deathmatch] Player {player.PlayerName} was respawned, but no available spawn point was found!", ConsoleColor.DarkYellow);
-            return spawnsList.FirstOrDefault();
+            return null;
         }
 
         public void SaveSpawnsFile()

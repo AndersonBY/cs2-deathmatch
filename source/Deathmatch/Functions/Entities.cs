@@ -49,8 +49,10 @@ namespace Deathmatch
         }
         public void SetGameRules()
         {
-            var gameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").First();
-            GameRules = gameRules.GameRules;
+            var gameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault();
+            GameRules = gameRules?.GameRules;
+            if (GameRules == null)
+                SendConsoleMessage("[Deathmatch] Unable to find cs_gamerules; gameplay initialization will retry.", ConsoleColor.DarkYellow);
         }
     }
 }
