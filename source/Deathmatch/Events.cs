@@ -27,7 +27,7 @@ namespace Deathmatch
 				playerData[player.Slot] = data;
 				if (Config.SaveWeapons)
 				{
-					_ = UpdateOrLoadPlayerData(player, player.SteamID.ToString(), null, true);
+					_ = UpdateOrLoadPlayerData(player, player.SteamID, null, true);
 				}
 				else
 				{
@@ -54,7 +54,7 @@ namespace Deathmatch
 							JsonConvert.SerializeObject(data.SecondaryWeapon),
 							JsonConvert.SerializeObject(data.Preferences),
 						};
-						_ = UpdateOrLoadPlayerData(player, player.SteamID.ToString(), preferences, false);
+						_ = UpdateOrLoadPlayerData(player, player.SteamID, preferences, false);
 					}
 					playerData.Remove(player.Slot);
 				}

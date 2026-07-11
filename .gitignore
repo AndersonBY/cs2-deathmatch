@@ -16,3 +16,5 @@
 # Package files
 *.nupkg
 *.snupkg
+.release-staging/
+artifacts/

@@ -24,10 +24,16 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
 {
     public override string ModuleName => "Deathmatch Core";
     public override string ModuleAuthor => "Nocky & Miksen(Forked)";
-    public override string ModuleVersion => "1.3.4a";
+    public override string ModuleVersion => "1.3.5";
 
     public void OnConfigParsed(DeathmatchConfig config)
     {
+        DeathmatchConfigSafety.Validate(config);
+        if (config.SpawnSystem.CheckVisible)
+        {
+            Logger.LogWarning("Spawn visibility checking is not available in this maintained build; distance checks remain enabled.");
+            config.SpawnSystem.CheckVisible = false;
+        }
         Config = config;
         CheckedEnemiesDistance = Config.SpawnSystem.DistanceRespawn;
         CheckSpawnVisibility = Config.SpawnSystem.CheckVisible;
@@ -147,8 +153,7 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
     }
     public override void Load(bool hotReload)
     {
-        var API = new Deathmatch();
-        Capabilities.RegisterPluginCapability(DeathmatchAPI, () => API);
+        Capabilities.RegisterPluginCapability(DeathmatchAPI, () => this);
         VirtualFunctions.CCSPlayer_ItemServices_CanAcquireFunc.Hook(OnWeaponCanAcquire, HookMode.Pre);
         //VirtualFunctions.CBaseEntity_TakeDamageOldFunc.Hook(OnTakeDamage, HookMode.Pre);
         RegisterListener<OnEntityTakeDamagePre>(OnEntityTakeDamagePre);
@@ -423,14 +428,14 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
 
         // Remove engine listeners — without this they accumulate every hotreload
         if (_onMapStartDelegate != null) { RemoveListener<OnMapStart>(_onMapStartDelegate); _onMapStartDelegate = null; }
-        if (_onMapEndDelegate   != null) { RemoveListener<OnMapEnd>(_onMapEndDelegate);     _onMapEndDelegate   = null; }
-        if (_onTickDelegate     != null) { RemoveListener<OnTick>(_onTickDelegate);         _onTickDelegate     = null; }
+        if (_onMapEndDelegate != null) { RemoveListener<OnMapEnd>(_onMapEndDelegate); _onMapEndDelegate = null; }
+        if (_onTickDelegate != null) { RemoveListener<OnTick>(_onTickDelegate); _onTickDelegate = null; }
 
         // Unhook user messages — same accumulation problem
-        if (_hookDecals       != null) { UnhookUserMessage(411, _hookDecals,       HookMode.Pre); _hookDecals       = null; }
-        if (_hookPoints       != null) { UnhookUserMessage(124, _hookPoints,       HookMode.Pre); _hookPoints       = null; }
+        if (_hookDecals != null) { UnhookUserMessage(411, _hookDecals, HookMode.Pre); _hookDecals = null; }
+        if (_hookPoints != null) { UnhookUserMessage(124, _hookPoints, HookMode.Pre); _hookPoints = null; }
         if (_hookRespawnSound != null) { UnhookUserMessage(208, _hookRespawnSound, HookMode.Pre); _hookRespawnSound = null; }
-        if (_hookHudMessages  != null) { UnhookUserMessage(323, _hookHudMessages,  HookMode.Pre); _hookHudMessages  = null; }
+        if (_hookHudMessages != null) { UnhookUserMessage(323, _hookHudMessages, HookMode.Pre); _hookHudMessages = null; }
 
         // Remove tracked command listeners
         foreach (var (cmd, cb) in _registeredCommandListeners)
@@ -455,6 +460,12 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
         Preferences.Categorie.RemoveAllCategories();
         Preferences.Menu.RemoveAllOptions();
         Preferences.Preference.RemoveAllPreferences();
+
+        if (hotReload && !string.IsNullOrWhiteSpace(Server.MapName))
+        {
+            SendConsoleMessage("[Deathmatch] Hot unload requires a map reload to restore removed entities and global cvars.", ConsoleColor.DarkYellow);
+            Server.ExecuteCommand($"changelevel {Server.MapName}");
+        }
     }
 
     // Tracks AddCommandListener invocations so Unload can match-and-remove
@@ -532,7 +543,13 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
 
     public void SetupCustomMode(string modeId)
     {
-        ActiveMode = Config.CustomModes[modeId];
+        if (!Config.CustomModes.TryGetValue(modeId, out var selectedMode))
+        {
+            SendConsoleMessage($"[Deathmatch] Custom mode '{modeId}' does not exist; keeping the current mode.", ConsoleColor.Red);
+            return;
+        }
+
+        ActiveMode = selectedMode;
         bool bNewmode = true;
         if (modeId.Equals(ActiveCustomMode.ToString()))
             bNewmode = false;
@@ -550,7 +567,7 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
 
         Server.NextFrame(() =>
         {
-            DeathmatchAPI.Get()?.TriggerEvent(new OnCustomModeStarted(int.Parse(ActiveCustomMode), ActiveMode));
+            TriggerEvent(new OnCustomModeStarted(int.Parse(ActiveCustomMode), ActiveMode));
         });
     }
 
@@ -566,7 +583,12 @@ public partial class Deathmatch : BasePlugin, IPluginConfig<DeathmatchConfig>
         if (mode.ExecuteCommands.Any())
         {
             foreach (var cmd in mode.ExecuteCommands)
-                Server.ExecuteCommand(cmd);
+            {
+                if (DeathmatchConfigSafety.IsAllowedModeCommand(cmd))
+                    Server.ExecuteCommand(cmd);
+                else
+                    SendConsoleMessage($"[Deathmatch] Rejected unsafe custom mode command: {cmd}", ConsoleColor.Red);
+            }
         }
 
         foreach (var p in Utilities.GetPlayers().Where(p => p.PawnIsAlive))
@@ -672,22 +694,11 @@ sv_cheats 0
             if (Config.CustomModes.Count <= 1)
                 return 0;
 
-            var modeId = int.Parse(ActiveCustomMode);
-            if (Config.Gameplay.RandomSelectionOfModes)
-            {
-                int iRandomMode;
-                do
-                {
-                    iRandomMode = Random.Shared.Next(0, Config.CustomModes.Count);
-                } while (iRandomMode == modeId);
-                return iRandomMode;
-            }
-            else
-            {
-                if (modeId + 1 != Config.CustomModes.Count && modeId + 1 < Config.CustomModes.Count)
-                    return modeId + 1;
-                return 0;
-            }
+            var modeId = int.TryParse(ActiveCustomMode, out var activeModeId)
+                ? activeModeId
+                : Config.Gameplay.MapStartMode;
+            var modeIds = Config.CustomModes.Keys.Select(int.Parse).ToArray();
+            return ModeSelection.GetNextModeId(modeIds, modeId, Config.Gameplay.RandomSelectionOfModes);
         }
         return Config.Gameplay.MapStartMode;
     }
